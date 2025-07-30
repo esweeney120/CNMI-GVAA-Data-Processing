@@ -8,12 +8,20 @@ library(zip)
 # Create a shaefile and zip the shapefile
 #This section of code will be to parse data from the Subsonus log file
 
+# Changes:
+# write filename as UTC time
+
 # User entered UTC date as "MMDDYYYY"
-UTC_date <- "07232025"
+UTC_date <- "07272025"
 
 # Set the working directory to the Subsonus log folder
 setwd(file.path("D:/CNMI", UTC_date, "Subsonus", paste0("subsonus_log_", UTC_date)))
 getwd()
+
+# Create "Zip" directory if it does not exist
+if (!dir.exists("Zip")) {
+  dir.create("Zip")
+}
 
 # Get the list of folders in the directory
 subsonus_folders <- list.dirs(path = getwd(), full.names = TRUE, recursive = FALSE)
@@ -24,8 +32,10 @@ folder_names <- basename(subsonus_folders)
 # Print the folder names
 print(folder_names)
 
-# Create for loop to iterate through the folders and extract the log number and date
+# Create an empty dataframe to store the Subsonus log data
+subsonus_log_df <- data.frame()
 
+# Create for loop to iterate through the folders to generate shapefiles and zip them
 for (folder in subsonus_folders) {
   # Extract the log number and date from the folder name
   log_number <- sub(".*_(\\d{6})_.*", "\\1", folder)
@@ -64,22 +74,27 @@ for (folder in subsonus_folders) {
     subsonus_data$Human.Timestamp.convert <- as.POSIXct(timestamp_clean, format = "%a %b %d %H:%M:%S %Y", tz = "America/Los_Angeles")
     subsonus_data$Human.Timestamp.convert <- format(subsonus_data$Human.Timestamp.convert, tz = "UTC", usetz = TRUE)
     # print(datetime_utc_str)
+    # Extract the UTC date from the first timestamp as MMDDYYYY
+    # UTC_date <- format(subsonus_data$Human.Timestamp.convert[1], "%m-%d-%Y")
     
     # Shorten names for each attribute header
     colnames(subsonus_data) <- c(
       "PDT_Time", "Loc_Lat", "Loc_Long", "Rem_X", "Rem_Y", "Rem_Z",
       "Rem_Depth", "Rem_Height", "Rem_Lat", "Rem_Long", "UTC_Time"
     )
+    # Add subsonus_data to the main dataframe
+    subsonus_log_df <- rbind(subsonus_log_df, subsonus_data)
     
-    # Create a shapefile with local position data
-    coordinates(subsonus_data) <- ~ Loc_Long + Loc_Lat
-    crs(subsonus_data) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
-    # Save the shapefile
     #Create directory called Shape in the folder path
     if (!dir.exists(file.path(folder, "Shape"))) {
       dir.create(file.path(folder, "Shape"))
     }
     
+    # Create a shapefile with local position data
+    coordinates(subsonus_data) <- ~ Loc_Long + Loc_Lat
+    crs(subsonus_data) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+    
+    # Save the shapefile
     raster::shapefile(subsonus_data, file.path(folder, "Shape", paste0(subsonus_log_filename,"_", file_number,".shp")), overwrite=TRUE)
     
     loc_shp_files <- list.files(path = file.path(folder, "Shape"), pattern = paste0(subsonus_log_filename,"_", file_number), full.names = TRUE)
@@ -88,7 +103,7 @@ for (folder in subsonus_folders) {
     loc_fname <- tools::file_path_sans_ext(basename(loc_shp_files[1]))
     print(loc_fname)
     # Zip the files
-    zip::zipr(file.path(folder, "Shape", paste0(loc_fname,".zip")), loc_shp_files)
+    zip::zipr(file.path(getwd(), "Zip", paste0(loc_fname,".zip")), loc_shp_files)
 
     # Create a shapefile with remote position data
     subsonus_data <- as.data.frame(subsonus_data)
@@ -99,7 +114,14 @@ for (folder in subsonus_folders) {
 
     rem_shp_files <- list.files(path = file.path(folder, "Shape"), pattern = paste0(subsonus_tag_log_filename,"_", file_number), full.names = TRUE)
     rem_fname <- tools::file_path_sans_ext(basename(rem_shp_files[1]))
-    zip::zipr(file.path(folder, "Shape",paste0(rem_fname,".zip")), rem_shp_files)
+    zip::zipr(file.path(getwd(), "Zip", paste0(rem_fname,".zip")), rem_shp_files)
 
   }
+  # Write subsonus_log_df to csv file
+  write.csv(subsonus_log_df, paste0("RemoteTrack_", UTC_date, ".csv", row.names = FALSE)) 
+  
 }
+
+# Future edit: Merge all the shapefiles into one shapefile
+
+
