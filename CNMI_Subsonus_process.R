@@ -3,6 +3,7 @@ library(dplyr)
 library(raster)
 library(sf)
 library(zip)
+library(purrr)
 
 # Read Subsonus Log and extract the relevant columns
 # Create a shaefile and zip the shapefile
@@ -11,17 +12,16 @@ library(zip)
 # Changes:
 # write filename as UTC time
 
+UTC_date_dir <- "07302025_UTC"
+
 # User entered UTC date as "MMDDYYYY"
-UTC_date <- "07272025"
+PDT_date <- "07302025"
 
 # Set the working directory to the Subsonus log folder
-setwd(file.path("D:/CNMI", UTC_date, "Subsonus", paste0("subsonus_log_", UTC_date)))
+setwd(file.path("D:/CNMI", UTC_date_dir, "Subsonus", paste0("subsonus_log_", PDT_date)))
 getwd()
 
-# Create "Zip" directory if it does not exist
-if (!dir.exists("Zip")) {
-  dir.create("Zip")
-}
+
 
 # Get the list of folders in the directory
 subsonus_folders <- list.dirs(path = getwd(), full.names = TRUE, recursive = FALSE)
@@ -35,6 +35,11 @@ print(folder_names)
 # Create an empty dataframe to store the Subsonus log data
 subsonus_log_df <- data.frame()
 
+# Create "Zip" directory if it does not exist
+if (!dir.exists("Zip")) {
+  dir.create("Zip")
+}
+
 # Create for loop to iterate through the folders to generate shapefiles and zip them
 for (folder in subsonus_folders) {
   # Extract the log number and date from the folder name
@@ -45,8 +50,10 @@ for (folder in subsonus_folders) {
   print(paste("Log Number:", log_number))
   print(paste("Log Date:", log_date))
   # Create filename based on log number and date for Local and Remote position data
-  subsonus_log_filename <- paste0("LocalTrack_", log_number,"_", log_date)
-  subsonus_tag_log_filename <- paste0("RemoteTrack_", log_number,"_", log_date)
+  # subsonus_log_filename <- paste0("LocalTrack_", log_number,"_", log_date)
+  # subsonus_tag_log_filename <- paste0("RemoteTrack_", log_number,"_", log_date)
+  subsonus_log_filename <- paste0("LocalTrack_", log_number,"_")
+  subsonus_tag_log_filename <- paste0("RemoteTrack_", log_number,"_")
   
   # Read the Subsonus log csv file
   RemTrack_files <- list.files(path = folder, pattern = "RemoteTrack")
@@ -74,8 +81,10 @@ for (folder in subsonus_folders) {
     subsonus_data$Human.Timestamp.convert <- as.POSIXct(timestamp_clean, format = "%a %b %d %H:%M:%S %Y", tz = "America/Los_Angeles")
     subsonus_data$Human.Timestamp.convert <- format(subsonus_data$Human.Timestamp.convert, tz = "UTC", usetz = TRUE)
     # print(datetime_utc_str)
-    # Extract the UTC date from the first timestamp as MMDDYYYY
-    # UTC_date <- format(subsonus_data$Human.Timestamp.convert[1], "%m-%d-%Y")
+    # Extract the UTC date from the first timestamp as MMDDYYYY by splitting on space
+    UTC_date <- as.character(map(strsplit(subsonus_data$Human.Timestamp.convert[1], split = " "), 1))
+    # Print the UTC date
+    print(paste("UTC Date:", UTC_date))
     
     # Shorten names for each attribute header
     colnames(subsonus_data) <- c(
@@ -95,9 +104,9 @@ for (folder in subsonus_folders) {
     crs(subsonus_data) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
     
     # Save the shapefile
-    raster::shapefile(subsonus_data, file.path(folder, "Shape", paste0(subsonus_log_filename,"_", file_number,".shp")), overwrite=TRUE)
+    raster::shapefile(subsonus_data, file.path(folder, "Shape", paste0(subsonus_log_filename,UTC_date,"_", file_number,".shp")), overwrite=TRUE)
     
-    loc_shp_files <- list.files(path = file.path(folder, "Shape"), pattern = paste0(subsonus_log_filename,"_", file_number), full.names = TRUE)
+    loc_shp_files <- list.files(path = file.path(folder, "Shape"), pattern = paste0(subsonus_log_filename,UTC_date,"_", file_number), full.names = TRUE)
     print(loc_shp_files)
     # Get the file name without the extension
     loc_fname <- tools::file_path_sans_ext(basename(loc_shp_files[1]))
@@ -110,15 +119,15 @@ for (folder in subsonus_folders) {
     coordinates(subsonus_data) <- ~ Rem_Long + Rem_Lat
     crs(subsonus_data) <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
     # Save the shapefile
-    raster::shapefile(subsonus_data, file.path(folder, "Shape", paste0(subsonus_tag_log_filename,"_", file_number,".shp")), overwrite=TRUE)
+    raster::shapefile(subsonus_data, file.path(folder, "Shape", paste0(subsonus_tag_log_filename, UTC_date,"_", file_number,".shp")), overwrite=TRUE)
 
-    rem_shp_files <- list.files(path = file.path(folder, "Shape"), pattern = paste0(subsonus_tag_log_filename,"_", file_number), full.names = TRUE)
+    rem_shp_files <- list.files(path = file.path(folder, "Shape"), pattern = paste0(subsonus_tag_log_filename,UTC_date,"_", file_number), full.names = TRUE)
     rem_fname <- tools::file_path_sans_ext(basename(rem_shp_files[1]))
     zip::zipr(file.path(getwd(), "Zip", paste0(rem_fname,".zip")), rem_shp_files)
 
   }
   # Write subsonus_log_df to csv file
-  write.csv(subsonus_log_df, paste0("RemoteTrack_", UTC_date, ".csv", row.names = FALSE)) 
+  # write.csv(subsonus_log_df, paste0("RemoteTrack_", UTC_date, ".csv", row.names = FALSE)) 
   
 }
 
